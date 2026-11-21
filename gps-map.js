@@ -1,19 +1,21 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id),host=$('gps-map-real'),fallback=$('gps-map-fallback'),notice=$('gps-map-overlay'),stops=window.budapestMapStops||[];
-let map=null,tiles=null,target=window.budapestMapCurrentTarget||stops[0],position=null,markers={},me=null,accuracy=null,guide=null,userMoved=false,loading=false,started=false,hasTiles=false;
+let map=null,tiles=null,target=window.budapestMapCurrentTarget||stops[0],position=null,markers={},me=null,accuracy=null,guide=null,routeId='',userMoved=false,loading=false,started=false,hasTiles=false;
 function status(message){notice.textContent=message;notice.hidden=!message}
 function unavailable(msg){fallback.hidden=false;host.hidden=true;status(msg)}
 function latlng(p){return [p.lat,p.lon]}
 function markerIcon(p,isTarget){return L.divIcon({className:'gps-pin',html:'<span class="gps-pin-dot'+(isTarget?' is-target':'')+'">'+(p.key==='godollo'?'G':p.key==='keleti'?'K':p.key==='food'?'R':p.key==='bar'?'B':'•')+'</span>',iconSize:[28,28],iconAnchor:[14,14],popupAnchor:[0,-18]})}
 function focusTarget(){if(!map||!target)return;userMoved=false;map.setView(latlng(target),15,{animate:false})}
 function focusMe(){if(!map){start();return}if(!position){if($('gps-toggle').getAttribute('aria-pressed')!=='true')$('gps-toggle').click();status('Bitte GPS aktivieren und Standortfreigabe erlauben');return}userMoved=false;map.setView(latlng(position),16,{animate:false})}
-function showBoth(){if(!map){start();return}if(position&&target){userMoved=false;map.fitBounds([latlng(position),latlng(target)],{padding:[35,35],maxZoom:16,animate:false})}else focusTarget()}
+function showBoth(){if(!map){start();return}const route=window.budapestWalkingGet?.(target?.key);if(route&&guide){userMoved=false;map.fitBounds(guide.getBounds(),{padding:[35,35],maxZoom:16,animate:false})}else if(position&&target){userMoved=false;map.fitBounds([latlng(position),latlng(target)],{padding:[35,35],maxZoom:16,animate:false})}else focusTarget()}
 function draw(){if(!map)return;
 for(const p of stops)if(markers[p.key])markers[p.key].setIcon(markerIcon(p,target?.key===p.key));
 if(target&&map._targetKey!==target.key){map._targetKey=target.key;if(!userMoved)focusTarget()}
 if(position){if(!me){me=L.circleMarker(latlng(position),{radius:8,color:'#fff',weight:3,fillColor:'#398bfa',fillOpacity:1}).addTo(map).bindPopup('Dein aktueller Standort');accuracy=L.circle(latlng(position),{radius:Math.max(position.acc||10,5),color:'#398bfa',weight:1,fillColor:'#398bfa',fillOpacity:.13}).addTo(map)}else{me.setLatLng(latlng(position));accuracy.setLatLng(latlng(position));accuracy.setRadius(Math.max(position.acc||10,5))}
-if(target){const l=[latlng(position),latlng(target)];if(!guide)guide=L.polyline(l,{color:'#387dd4',weight:3,dashArray:'5 8',opacity:.85}).addTo(map);else guide.setLatLngs(l)}}
-else{if(me){map.removeLayer(me);map.removeLayer(accuracy);me=accuracy=null}if(guide){map.removeLayer(guide);guide=null}}}
+}else{if(me){map.removeLayer(me);map.removeLayer(accuracy);me=accuracy=null}}
+const route=position&&target?window.budapestWalkingGet?.(target.key):null;
+if(route?.geometry?.length>1){const points=route.geometry.map(c=>[c[1],c[0]]),id=route.key+':'+route.checked;if(!guide){guide=L.polyline(points,{color:'#387dd4',weight:5,opacity:.95}).addTo(map)}else guide.setLatLngs(points);if(routeId!==id){routeId=id;if(!userMoved)map.fitBounds(guide.getBounds(),{padding:[35,35],maxZoom:16,animate:false})}}else{if(guide){map.removeLayer(guide);guide=null}routeId=''}
+}
 function init(){if(started||!window.L||!stops.length)return;try{
 started=true;host.hidden=false;map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:true,zoomSnap:.5}).setView(latlng(target||stops[0]),15);
 map._targetKey=target?.key||stops[0].key;
@@ -34,6 +36,6 @@ window.budapestMapUpdate=(pos,p)=>{const key=target?.key;target=p||target||stops
 $('gps-map-target').addEventListener('click',()=>map?focusTarget():start());
 $('gps-map-me').addEventListener('click',focusMe);
 $('gps-map-both').addEventListener('click',showBoth);
-window.addEventListener('online',start);document.addEventListener('visibilitychange',()=>{if(!document.hidden){start();map?.invalidateSize()}});
+window.addEventListener('budapest-route-state',()=>{if(map)draw()});window.addEventListener('online',start);document.addEventListener('visibilitychange',()=>{if(!document.hidden){start();map?.invalidateSize()}});
 if(!navigator.onLine)unavailable('Offline · schematische Karte');else start();
 })();
